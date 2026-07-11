@@ -1,0 +1,16 @@
+{
+  "cli": { "version": ">= 12.0.0", "appVersionSource": "remote" },
+  "build": {
+    "preview": {
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "env": { "EXPO_PUBLIC_API_BASE": "https://stock.lemuel.co.kr" }
+    },
+    "production": {
+      "autoIncrement": true,
+      "android": { "buildType": "app-bundle" },
+      "env": { "EXPO_PUBLIC_API_BASE": "https://stock.lemuel.co.kr" }
+    }
+  },
+  "submit": { "production": {} }
+}
