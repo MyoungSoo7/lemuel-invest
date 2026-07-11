@@ -1,6 +1,6 @@
 // KIS(한국투자증권) balance/trades 원본 응답을 앱이 쓰기 좋은 형태로 파싱.
 // KIS 필드명은 축약형이라 여기서 한 번에 친화적 모델로 변환한다.
-import { API_BASE } from './config';
+import { API_BASE, CF_ACCESS_HEADERS } from './config';
 
 export type Holding = {
   code: string;        // 종목코드
@@ -43,7 +43,7 @@ export type Watch = {
 const n = (v: any) => (v == null || v === '' ? 0 : Number(v)) || 0;
 
 export async function fetchAccount(): Promise<Account> {
-  const res = await fetch(`${API_BASE}/api/balance`, { headers: { accept: 'application/json' } });
+  const res = await fetch(`${API_BASE}/api/balance`, { headers: { accept: 'application/json', ...CF_ACCESS_HEADERS } });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const raw = await res.json();
   const s = (raw.output2 && raw.output2[0]) || {};
@@ -74,7 +74,7 @@ export async function fetchAccount(): Promise<Account> {
 
 export async function fetchWatchlist(): Promise<Watch[]> {
   try {
-    const res = await fetch(`${API_BASE}/api/watchlist`, { headers: { accept: 'application/json' } });
+    const res = await fetch(`${API_BASE}/api/watchlist`, { headers: { accept: 'application/json', ...CF_ACCESS_HEADERS } });
     if (!res.ok) return [];
     const raw = await res.json();
     return (Array.isArray(raw) ? raw : []).map((w: any) => ({
@@ -93,7 +93,7 @@ export async function fetchWatchlist(): Promise<Watch[]> {
 // 종목 가격 이력(차트) — /api/chart/{code}. 최신-우선 → 시간순으로 뒤집어 반환
 export async function fetchChart(code: string): Promise<number[]> {
   try {
-    const res = await fetch(`${API_BASE}/api/chart/${code}`, { headers: { accept: 'application/json' } });
+    const res = await fetch(`${API_BASE}/api/chart/${code}`, { headers: { accept: 'application/json', ...CF_ACCESS_HEADERS } });
     if (!res.ok) return [];
     const raw = await res.json();
     return (Array.isArray(raw) ? raw : []).map((x: any) => n(x)).reverse();
@@ -104,7 +104,7 @@ export async function fetchChart(code: string): Promise<number[]> {
 
 export async function fetchTrades(): Promise<Trade[]> {
   try {
-    const res = await fetch(`${API_BASE}/api/trades`, { headers: { accept: 'application/json' } });
+    const res = await fetch(`${API_BASE}/api/trades`, { headers: { accept: 'application/json', ...CF_ACCESS_HEADERS } });
     if (!res.ok) return [];
     const raw = await res.json();
     const arr = Array.isArray(raw) ? raw : raw.output || [];
