@@ -90,6 +90,18 @@ export async function fetchWatchlist(): Promise<Watch[]> {
   }
 }
 
+// 종목 가격 이력(차트) — /api/chart/{code}. 최신-우선 → 시간순으로 뒤집어 반환
+export async function fetchChart(code: string): Promise<number[]> {
+  try {
+    const res = await fetch(`${API_BASE}/api/chart/${code}`, { headers: { accept: 'application/json' } });
+    if (!res.ok) return [];
+    const raw = await res.json();
+    return (Array.isArray(raw) ? raw : []).map((x: any) => n(x)).reverse();
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchTrades(): Promise<Trade[]> {
   try {
     const res = await fetch(`${API_BASE}/api/trades`, { headers: { accept: 'application/json' } });

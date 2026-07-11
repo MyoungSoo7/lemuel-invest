@@ -1,10 +1,10 @@
 // Lemuel Invest — Toss 스타일 투자 대시보드 (읽기전용 · auto-trading KIS API)
 import { useCallback, useEffect, useState } from 'react';
 import {
-  RefreshControl, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View,
+  Modal, Pressable, RefreshControl, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View,
 } from 'react-native';
 import { API_BASE, REFRESH_INTERVAL_MS } from './config';
-import { Account, fetchAccount, fetchTrades, fetchWatchlist, Holding, Trade, Watch } from './kis';
+import { Account, fetchAccount, fetchChart, fetchTrades, fetchWatchlist, Holding, Trade, Watch } from './kis';
 
 // 한국 관례: 상승/이익 = 빨강, 하락/손실 = 파랑
 const RED = '#f04452';   // Toss red
@@ -22,6 +22,7 @@ export default function App() {
   const [watch, setWatch] = useState<Watch[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [selected, setSelected] = useState<Watch | null>(null); // 종목 상세 모달
 
   const load = useCallback(async () => {
     try {
@@ -80,7 +81,11 @@ export default function App() {
               <>
                 <Text style={s.sectionTitle}>관심 종목</Text>
                 <View style={s.card}>
-                  {watch.map((w) => <WatchRow key={w.code} w={w} />)}
+                  {watch.map((w) => (
+                    <Pressable key={w.code} onPress={() => setSelected(w)} android_ripple={{ color: '#eef1f5' }}>
+                      <WatchRow w={w} />
+                    </Pressable>
+                  ))}
                 </View>
               </>
             )}
@@ -105,7 +110,74 @@ export default function App() {
 
         {!acc && !error && <Text style={s.footer}>불러오는 중…</Text>}
       </ScrollView>
+
+      <StockDetail watch={selected} onClose={() => setSelected(null)} />
     </SafeAreaView>
+  );
+}
+
+// 종목 상세 — 관심종목 탭 시 큰 차트 + 가격 정보 (bottom sheet 느낌 모달)
+function StockDetail({ watch, onClose }: { watch: Watch | null; onClose: () => void }) {
+  const [chart, setChart] = useState<number[]>([]);
+  useEffect(() => {
+    if (!watch) return;
+    setChart(watch.history.slice().reverse()); // 우선 캐시된 걸로
+    fetchChart(watch.code).then((c) => { if (c.length) setChart(c); }).catch(() => {});
+  }, [watch]);
+
+  if (!watch) return null;
+  const c = pl(watch.change);
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={s.backdrop} onPress={onClose} />
+      <View style={s.sheet}>
+        <View style={s.handle} />
+        <Text style={s.dName}>{watch.name}</Text>
+        <Text style={s.dCode}>{watch.code}</Text>
+        <Text style={s.dPrice}>{watch.price > 0 ? won(watch.price) : '장마감'}</Text>
+        {watch.price > 0 && (
+          <Text style={[s.dChange, { color: c }]}>
+            {watch.change >= 0 ? '▲' : '▼'} {won(Math.abs(watch.change))} ({pct(watch.changeRate)})
+          </Text>
+        )}
+        <BigChart data={chart} color={c} />
+        <Text style={s.dNote}>
+          {chart.length >= 2
+            ? `최근 ${chart.length}개 시세 · 평일 장중(09:00~15:30) 실시간 갱신`
+            : '가격 이력이 아직 없어요 — 평일 장중에 채워집니다'}
+        </Text>
+        <Pressable style={s.dClose} onPress={onClose}>
+          <Text style={s.dCloseText}>닫기</Text>
+        </Pressable>
+      </View>
+    </Modal>
+  );
+}
+
+// 큰 차트 — 시간순 데이터를 막대 라인으로
+function BigChart({ data, color }: { data: number[]; color: string }) {
+  const pts = data.filter((v) => v > 0);
+  if (pts.length < 2) return <View style={s.bigChartEmpty}><Text style={s.dNote}>차트 데이터 없음</Text></View>;
+  const min = Math.min(...pts), max = Math.max(...pts), range = max - min || 1;
+  return (
+    <View>
+      <View style={s.bigChart}>
+        {pts.map((v, i) => (
+          <View key={i} style={{
+            flex: 1,
+            height: 20 + ((v - min) / range) * 130,
+            backgroundColor: color,
+            opacity: 0.3 + (i / pts.length) * 0.7,
+            marginHorizontal: 0.8,
+            borderRadius: 2,
+          }} />
+        ))}
+      </View>
+      <View style={s.chartAxis}>
+        <Text style={s.axisText}>저 {won(min)}</Text>
+        <Text style={s.axisText}>고 {won(max)}</Text>
+      </View>
+    </View>
   );
 }
 
@@ -214,5 +286,19 @@ const s = StyleSheet.create({
   tSide: { fontSize: 14, fontWeight: '600' },
   spark: { flexDirection: 'row', alignItems: 'flex-end', width: 64, height: 28 },
   empty: { color: GRAY, fontSize: 14, padding: 16, textAlign: 'center' },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)' },
+  sheet: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 36 },
+  handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: '#e5e8eb', marginBottom: 16 },
+  dName: { fontSize: 22, fontWeight: '800', color: INK },
+  dCode: { fontSize: 13, color: GRAY, marginTop: 2 },
+  dPrice: { fontSize: 30, fontWeight: '800', color: INK, marginTop: 14 },
+  dChange: { fontSize: 15, fontWeight: '600', marginTop: 4 },
+  bigChart: { flexDirection: 'row', alignItems: 'flex-end', height: 160, marginTop: 20 },
+  bigChartEmpty: { height: 160, marginTop: 20, alignItems: 'center', justifyContent: 'center' },
+  chartAxis: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
+  axisText: { fontSize: 11, color: GRAY },
+  dNote: { fontSize: 12, color: GRAY, marginTop: 14, textAlign: 'center' },
+  dClose: { marginTop: 20, backgroundColor: '#f2f4f6', borderRadius: 14, paddingVertical: 15, alignItems: 'center' },
+  dCloseText: { fontSize: 16, fontWeight: '700', color: INK },
   footer: { color: GRAY, fontSize: 12, textAlign: 'center', marginTop: 8 },
 });
