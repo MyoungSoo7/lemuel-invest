@@ -31,6 +31,15 @@ export type Trade = {
   time: string;
 };
 
+export type Watch = {
+  code: string;
+  name: string;
+  price: number;
+  change: number;
+  changeRate: number;
+  history: number[];  // 최신-우선
+};
+
 const n = (v: any) => (v == null || v === '' ? 0 : Number(v)) || 0;
 
 export async function fetchAccount(): Promise<Account> {
@@ -61,6 +70,24 @@ export async function fetchAccount(): Promise<Account> {
     profitRate: investBase > 0 ? (profit / investBase) * 100 : 0,
     holdings,
   };
+}
+
+export async function fetchWatchlist(): Promise<Watch[]> {
+  try {
+    const res = await fetch(`${API_BASE}/api/watchlist`, { headers: { accept: 'application/json' } });
+    if (!res.ok) return [];
+    const raw = await res.json();
+    return (Array.isArray(raw) ? raw : []).map((w: any) => ({
+      code: w.code ?? '',
+      name: w.name ?? w.code ?? '종목',
+      price: n(w.price),
+      change: n(w.change),
+      changeRate: n(w.changeRate),
+      history: (w.history ?? []).map((x: any) => n(x)),
+    }));
+  } catch {
+    return [];
+  }
 }
 
 export async function fetchTrades(): Promise<Trade[]> {

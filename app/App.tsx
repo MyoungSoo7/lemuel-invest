@@ -4,7 +4,7 @@ import {
   RefreshControl, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View,
 } from 'react-native';
 import { API_BASE, REFRESH_INTERVAL_MS } from './config';
-import { Account, fetchAccount, fetchTrades, Holding, Trade } from './kis';
+import { Account, fetchAccount, fetchTrades, fetchWatchlist, Holding, Trade, Watch } from './kis';
 
 // 한국 관례: 상승/이익 = 빨강, 하락/손실 = 파랑
 const RED = '#f04452';   // Toss red
@@ -19,13 +19,14 @@ const pl = (v: number) => (v > 0 ? RED : v < 0 ? BLUE : GRAY);
 export default function App() {
   const [acc, setAcc] = useState<Account | null>(null);
   const [trades, setTrades] = useState<Trade[]>([]);
+  const [watch, setWatch] = useState<Watch[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const [a, t] = await Promise.all([fetchAccount(), fetchTrades()]);
-      setAcc(a); setTrades(t); setError(null);
+      const [a, t, w] = await Promise.all([fetchAccount(), fetchTrades(), fetchWatchlist()]);
+      setAcc(a); setTrades(t); setWatch(w); setError(null);
     } catch (e: any) {
       setError(String(e.message ?? e));
     }
@@ -73,6 +74,16 @@ export default function App() {
               <Divider />
               <Row k="총 평가금액" v={won(acc.totalEval)} strong />
             </View>
+
+            {/* 관심 종목 */}
+            {watch.length > 0 && (
+              <>
+                <Text style={s.sectionTitle}>관심 종목</Text>
+                <View style={s.card}>
+                  {watch.map((w) => <WatchRow key={w.code} w={w} />)}
+                </View>
+              </>
+            )}
 
             {/* 보유 종목 */}
             <Text style={s.sectionTitle}>보유 종목 {acc.holdings.length > 0 ? `${acc.holdings.length}` : ''}</Text>
@@ -122,6 +133,44 @@ function HoldingRow({ h }: { h: Holding }) {
   );
 }
 
+// 미니 스파크라인 — react-native-svg 없이 작은 세로 막대로 추세 표현
+function Sparkline({ data, color }: { data: number[]; color: string }) {
+  const pts = data.slice(0, 20).reverse().filter((v) => v > 0); // 최신-우선 → 시간순
+  if (pts.length < 2) return <View style={{ width: 64 }} />;
+  const min = Math.min(...pts), max = Math.max(...pts), range = max - min || 1;
+  return (
+    <View style={s.spark}>
+      {pts.map((v, i) => (
+        <View key={i} style={{
+          flex: 1,
+          height: 6 + ((v - min) / range) * 22,
+          backgroundColor: color,
+          opacity: 0.25 + (i / pts.length) * 0.75,
+          marginHorizontal: 0.5,
+          borderRadius: 1,
+        }} />
+      ))}
+    </View>
+  );
+}
+
+function WatchRow({ w }: { w: Watch }) {
+  const c = pl(w.change);
+  return (
+    <View style={s.hRow}>
+      <View style={{ flex: 1 }}>
+        <Text style={s.hName} numberOfLines={1}>{w.name}</Text>
+        <Text style={s.hSub}>{w.code}</Text>
+      </View>
+      <Sparkline data={w.history} color={c} />
+      <View style={{ alignItems: 'flex-end', minWidth: 88 }}>
+        <Text style={s.hAmt}>{w.price > 0 ? won(w.price) : '—'}</Text>
+        <Text style={[s.hPl, { color: c }]}>{w.price > 0 ? pct(w.changeRate) : '장마감'}</Text>
+      </View>
+    </View>
+  );
+}
+
 function TradeRow({ t }: { t: Trade }) {
   const buy = /매수|02|BUY/i.test(t.side);
   return (
@@ -163,6 +212,7 @@ const s = StyleSheet.create({
   hAmt: { color: INK, fontSize: 15, fontWeight: '600' },
   hPl: { fontSize: 12, marginTop: 3, fontWeight: '500' },
   tSide: { fontSize: 14, fontWeight: '600' },
+  spark: { flexDirection: 'row', alignItems: 'flex-end', width: 64, height: 28 },
   empty: { color: GRAY, fontSize: 14, padding: 16, textAlign: 'center' },
   footer: { color: GRAY, fontSize: 12, textAlign: 'center', marginTop: 8 },
 });
